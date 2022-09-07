@@ -308,8 +308,13 @@ mic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (mic_msi_enable){
 		for (i = 0; i < MIC_NUM_MSIX_ENTRIES; i ++)
 			bd_info->bi_msix_entries[i].entry = i;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
 		err = pci_enable_msix(mic_ctx->bi_pdev, bd_info->bi_msix_entries,
 				      MIC_NUM_MSIX_ENTRIES);
+#else
+		err = pci_enable_msix_exact(mic_ctx->bi_pdev, bd_info->bi_msix_entries,
+				      MIC_NUM_MSIX_ENTRIES);
+#endif
 		if (err == 0 ) {
 			// Only support 1 MSIx for now
 			err = request_irq(bd_info->bi_msix_entries[0].vector,
@@ -337,7 +342,7 @@ mic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 			NULL, "mic%d", mic_ctx->bd_info->bi_ctx.bi_id);
 	err = sysfs_create_group(&mic_ctx->bd_info->bi_sysfsdev->kobj, &bd_attr_group);
 	mic_ctx->sysfs_state = sysfs_get_dirent(mic_ctx->bd_info->bi_sysfsdev->kobj.sd,
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,35) && LINUX_VERSION_CODE < KERNEL_VERSION(3,14,0))
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,35) && LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0))
 				NULL,
 #endif
 				"state");
@@ -778,7 +783,11 @@ mic_load_file(const char* fn, uint8_t* buffer, uint32_t max_size)
 		goto cleanup_filp;
 	}
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
 	c = vfs_read(filp, buffer, filp_size, &pos);
+#else
+	c = kernel_read(filp, buffer, filp_size, &pos);
+#endif
 	if(c != (long)filp_size) {
 		status = -1; //FIXME
 		goto cleanup_filp;

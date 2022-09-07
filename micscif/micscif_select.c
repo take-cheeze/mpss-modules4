@@ -50,6 +50,10 @@
 #include <linux/sched/rt.h>
 #endif
 
+#ifndef set_mb
+#define set_mb(var, value)  do { (var) = (value); mb(); } while (0)
+#endif
+
 struct poll_table_page {
 	struct poll_table_page *next;
 	struct poll_table_entry *entry;
@@ -191,7 +195,11 @@ static struct poll_table_entry *poll_get_entry(struct poll_wqueues *p)
 	return table->entry++;
 }
 
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(4,14,0))
+static int __pollwake(wait_queue_entry_t *wait, unsigned mode, int sync, void *key)
+#else
 static int __pollwake(wait_queue_t *wait, unsigned mode, int sync, void *key)
+#endif
 {
 	struct poll_wqueues *pwq = wait->private;
 	DECLARE_WAITQUEUE(dummy_wait, pwq->polling_task);
@@ -217,7 +225,11 @@ static int __pollwake(wait_queue_t *wait, unsigned mode, int sync, void *key)
 	return default_wake_function(&dummy_wait, mode, sync, key);
 }
 
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(4,14,0))
+static int pollwake(wait_queue_entry_t *wait, unsigned mode, int sync, void *key)
+#else
 static int pollwake(wait_queue_t *wait, unsigned mode, int sync, void *key)
+#endif
 {
 	struct poll_table_entry *entry;
 
