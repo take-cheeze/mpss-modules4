@@ -1,0 +1,5 @@
+network-scripts/
+*.cmd
+mic.*
+Modules.symvers
+modules.order
