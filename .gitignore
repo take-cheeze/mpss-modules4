@@ -1,5 +1,5 @@
 network-scripts/
 *.cmd
 mic.*
-Modules.symvers
+Module.symvers
 modules.order
