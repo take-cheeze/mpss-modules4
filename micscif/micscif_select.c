@@ -74,7 +74,11 @@ struct poll_table_page {
 
 #define MAX_SLACK	(100 * NSEC_PER_MSEC)
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+static long __estimate_accuracy(struct timespec64 *tv)
+#else
 static long __estimate_accuracy(struct timespec *tv)
+#endif
 {
 	long slack;
 	int divfactor = 1000;
@@ -97,10 +101,18 @@ static long __estimate_accuracy(struct timespec *tv)
 	return slack;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+static long estimate_accuracy(struct timespec64 *tv)
+#else
 static long estimate_accuracy(struct timespec *tv)
+#endif
 {
 	unsigned long ret;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+	struct timespec64 now;
+#else
 	struct timespec now;
+#endif
 
 	/*
 	 * Realtime tasks get a slack of 0 for obvious reasons.
@@ -109,8 +121,13 @@ static long estimate_accuracy(struct timespec *tv)
 	if (rt_task(current))
 		return 0;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+	ktime_get_ts64(&now);
+	now = timespec64_sub(*tv, now);
+#else
 	ktime_get_ts(&now);
 	now = timespec_sub(*tv, now);
+#endif
 	ret = __estimate_accuracy(&now);
 	if (ret < current->timer_slack_ns)
 		return current->timer_slack_ns;
@@ -327,7 +344,11 @@ static inline unsigned int do_pollfd(struct scif_pollepd *pollfd, poll_table *pw
 }
 
 static int do_poll(unsigned int nfds,  struct scif_pollepd *ufds,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+		   struct poll_wqueues *wait, struct timespec64 *end_time)
+#else
 		   struct poll_wqueues *wait, struct timespec *end_time)
+#endif
 {
 	poll_table* pt = &wait->pt;
 	ktime_t expire, *to = NULL;
@@ -376,7 +397,11 @@ static int do_poll(unsigned int nfds,  struct scif_pollepd *ufds,
 		 * pointer to the expiry value.
 		 */
 		if (end_time && !to) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+			expire = timespec64_to_ktime(*end_time);
+#else
 			expire = timespec_to_ktime(*end_time);
+#endif
 			to = &expire;
 		}
 
@@ -387,7 +412,11 @@ static int do_poll(unsigned int nfds,  struct scif_pollepd *ufds,
 }
 
 static int do_scif_poll(struct scif_pollepd *ufds, unsigned int nfds,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+		struct timespec64 *end_time)
+#else
 		struct timespec *end_time)
+#endif
 {
 	struct poll_wqueues table;
  	int epdcount;
@@ -403,16 +432,33 @@ static int do_scif_poll(struct scif_pollepd *ufds, unsigned int nfds,
  * Add two timespec values and do a safety check for overflow.
  * It's assumed that both values are valid (>= 0)
  */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+static struct timespec64 scif_timespec_add_safe(const struct timespec64 lhs,
+				  const struct timespec64 rhs)
+#else
 static struct timespec scif_timespec_add_safe(const struct timespec lhs,
 				  const struct timespec rhs)
+#endif
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+	struct timespec64 res;
+#else
 	struct timespec res;
+#endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+	set_normalized_timespec64(&res, lhs.tv_sec + rhs.tv_sec,
+#else
 	set_normalized_timespec(&res, lhs.tv_sec + rhs.tv_sec,
+#endif
 				lhs.tv_nsec + rhs.tv_nsec);
 
 	if (res.tv_sec < lhs.tv_sec || res.tv_sec < rhs.tv_sec)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+		res.tv_sec = TIME64_MAX;
+#else
 		res.tv_sec = TIME_T_MAX;
+#endif
 
 	return res;
 }
@@ -427,18 +473,30 @@ static struct timespec scif_timespec_add_safe(const struct timespec lhs,
  *
  * Returns -EINVAL if sec/nsec are not normalized. Otherwise 0.
  */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+static int scif_poll_select_set_timeout(struct timespec64 *to, long sec, long nsec)
+{
+	struct timespec64 ts = {.tv_sec = sec, .tv_nsec = nsec};
+
+	if (!timespec64_valid(&ts))
+#else
 static int scif_poll_select_set_timeout(struct timespec *to, long sec, long nsec)
 {
 	struct timespec ts = {.tv_sec = sec, .tv_nsec = nsec};
 
 	if (!timespec_valid(&ts))
+#endif
 		return -EINVAL;
 
 	/* Optimize for the zero timeout value here */
 	if (!sec && !nsec) {
 		to->tv_sec = to->tv_nsec = 0;
 	} else {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+		ktime_get_ts64(to);
+#else
 		ktime_get_ts(to);
+#endif
 		*to = scif_timespec_add_safe(*to, ts);
 	}
 	return 0;
@@ -446,7 +504,11 @@ static int scif_poll_select_set_timeout(struct timespec *to, long sec, long nsec
 
 int scif_poll(struct scif_pollepd *ufds, unsigned int nfds, long timeout_msecs)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+	struct timespec64 end_time, *to = NULL;
+#else
 	struct timespec end_time, *to = NULL;
+#endif
 	if (timeout_msecs >= 0) {
 		to = &end_time;
 		scif_poll_select_set_timeout(to, timeout_msecs / MSEC_PER_SEC,

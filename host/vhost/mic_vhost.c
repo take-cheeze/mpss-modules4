@@ -420,7 +420,9 @@ static unsigned next_desc(struct vring_desc *desc)
 	/* Make sure compiler knows to grab that: we don't want it changing! */
 	/* We will use the result as an index in an array, so most
 	 * architectures only need a compiler barrier here. */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
 	read_barrier_depends();
+#endif
 
 	return next;
 }

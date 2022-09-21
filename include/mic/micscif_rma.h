@@ -916,20 +916,34 @@ static inline int __scif_dec_pinned_vm_lock(struct mm_struct *mm,
 {
 	if (mm && nr_pages && mic_ulimit_check) {
 		if (try_lock) {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0))
+			if (!down_write_trylock(&mm->mmap_lock)) {
+#else
 			if (!down_write_trylock(&mm->mmap_sem)) {
+#endif
 				return -1;
 			}
 		} else {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0))
+			down_write(&mm->mmap_lock);
+#else
 			down_write(&mm->mmap_sem);
+#endif
 		}
 #if (defined(RHEL_RELEASE_CODE) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)))
 		mm->pinned_vm.counter -= nr_pages;
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0))
+		atomic64_sub(nr_pages, &mm->pinned_vm);
 #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 1, 0))
 		mm->pinned_vm -= nr_pages;
 #else
 		mm->locked_vm -= nr_pages;
 #endif
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0))
+		up_write(&mm->mmap_lock);
+#else
 		up_write(&mm->mmap_sem);
+#endif
 	}
 	return 0;
 }
@@ -942,6 +956,8 @@ static inline int __scif_check_inc_pinned_vm(struct mm_struct *mm,
 		locked = nr_pages;
 #if (defined(RHEL_RELEASE_CODE) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)))
 		locked += mm->pinned_vm.counter;
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0))
+		locked += atomic64_read(&mm->pinned_vm);
 #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 1, 0))
 		locked += mm->pinned_vm;
 #else
@@ -955,6 +971,8 @@ static inline int __scif_check_inc_pinned_vm(struct mm_struct *mm,
 		} else {
 #if (defined(RHEL_RELEASE_CODE) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)))
 			mm->pinned_vm.counter = locked;
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0))
+			atomic64_set(&mm->pinned_vm, locked);
 #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 1, 0))
 			mm->pinned_vm = locked;
 #else

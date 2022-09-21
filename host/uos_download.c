@@ -121,22 +121,39 @@ calc_deltaf(mic_ctx_t *mic_ctx)
 	 */
 	/* Need to implement the monotonic/irqsave logic for windows */
 	unsigned long flags;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+	struct timespec64 ts1, ts2;
+#else
 	struct timespec ts1, ts2;
+#endif
 	int64_t mono_ns;
 	int i = 0;
 	do {
 		local_irq_save(flags);
 		cnt1 = etc_read(mic_ctx->mmio.va);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+		ktime_get_raw_ts64(&ts1);
+#else
 		getrawmonotonic(&ts1);
+#endif
 		local_irq_restore(flags);
 		mdelay(TIME_DELAY_IN_SEC * 1000);
 		local_irq_save(flags);
 		cnt2 = etc_read(mic_ctx->mmio.va);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+		ktime_get_raw_ts64(&ts2);
+#else
 		getrawmonotonic(&ts2);
+#endif
 		local_irq_restore(flags);
 		etc_cnt2 = cnt2 - cnt1;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+		ts2 = timespec64_sub(ts2, ts1);
+		mono_ns = timespec64_to_ns(&ts2);
+#else
 		ts2 = timespec_sub(ts2, ts1);
 		mono_ns = timespec_to_ns(&ts2);
+#endif
 		/* Recalculate etc_cnt2 based on getrawmonotonic */
 		etc_cnt2 = (etc_cnt2 * TIME_DELAY_IN_SEC * 1000 * 1000 * 1000) / mono_ns;
 		deltaf = ( ETC_CLK_FREQ * (etc_cnt2 - etc_cnt1)) / etc_cnt1;
@@ -1284,12 +1301,21 @@ ramoops_proc_open(struct inode *inode, struct file *file)
 	return single_open(file, ramoops_proc_show, NULL);
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0))
+struct proc_ops ramoops_proc_fops = {
+	.proc_open		= ramoops_proc_open,
+	.proc_read		= seq_read,
+	.proc_lseek		= seq_lseek,
+        .proc_release 	= single_release,
+};
+#else
 struct file_operations ramoops_proc_fops = {
 	.open		= ramoops_proc_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
         .release 	= single_release,
 };
+#endif
 
 #else // LINUX VERSION
 static int
@@ -1555,8 +1581,13 @@ adapter_init_device(mic_ctx_t *mic_ctx)
 	device_id = mic_ctx->bi_pdev->device;
 	mic_ctx->bi_family = get_product_family(device_id);
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(5,0,0)
 	if ((mic_ctx->mmio.va = ioremap_nocache(mic_ctx->mmio.pa, 
 						mic_ctx->mmio.len)) == NULL) {
+#else
+	if ((mic_ctx->mmio.va = ioremap(mic_ctx->mmio.pa, 
+						mic_ctx->mmio.len)) == NULL) {
+#endif
 		printk("mic %d: failed to map mmio space\n", mic_ctx->bi_id);
 		err = -ENOMEM;
 		goto destroy_remap_wq;

@@ -99,8 +99,12 @@ micscif_inc_node_refcnt(struct micscif_dev *dev, long cnt)
 			SCIFDEV_STOPPING == dev->sd_state ||
 			SCIFDEV_INIT == dev->sd_state)
 			goto bail_out;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0))
+		if (atomic64_read(&dev->scif_ref_cnt) & (1ULL << SCIF_NODE_MAGIC_BIT)) {
+#else
 		if (test_bit(SCIF_NODE_MAGIC_BIT, 
 			&dev->scif_ref_cnt.counter)) {
+#endif
 			/* Notify host that the remote node must be woken */
 			struct nodemsg notif_msg;
 
@@ -125,8 +129,12 @@ micscif_inc_node_refcnt(struct micscif_dev *dev, long cnt)
 			 */
 			if (dev->sd_wait_status == OP_COMPLETED) {
 				dev->sd_state = SCIFDEV_RUNNING;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0))
+				atomic64_xor(1ULL << SCIF_NODE_MAGIC_BIT, &dev->scif_ref_cnt);
+#else
 				clear_bit(SCIF_NODE_MAGIC_BIT, 
 					&dev->scif_ref_cnt.counter);
+#endif
 			}
 		}
 		/* The ref count was not added if the node was idle. */

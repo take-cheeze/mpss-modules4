@@ -61,7 +61,11 @@ void acptboot_getconn(struct work_struct *work)
 	mic_ctx_t *node_ctx;
 	struct scif_portID data;
 	scif_epd_t conn_epd;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0))
+	struct timespec64 tod;
+#else
 	struct timespec tod;
+#endif
 	int proto;
 	int version;
 	int err;
@@ -101,7 +105,11 @@ void acptboot_getconn(struct work_struct *work)
 		break;
 
 	case ACPT_REQUEST_TIME:
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0))
+		ktime_get_real_ts64(&tod);
+#else
 		getnstimeofday(&tod);
+#endif
 		proto = ACPT_TIME_DATA;
 		scif_send(conn_epd, &proto, sizeof(proto), SCIF_SEND_BLOCK);
 		scif_send(conn_epd, &tod, sizeof(tod), SCIF_SEND_BLOCK);

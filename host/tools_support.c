@@ -93,8 +93,15 @@ mic_pin_user_pages (void *data, struct page **pages, uint32_t len, int32_t *nf_p
 	}
 
 	// pin the user pages; use semaphores on linux for doing the same
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5,8,0))
+	down_read(&current->mm->mmap_lock);
+#else
 	down_read(&current->mm->mmap_sem);
-#if LINUX_VERSION_CODE > KERNEL_VERSION(4,14,0)
+#endif
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+	*nf_pages = (int32_t)get_user_pages_remote(current->mm, (uint64_t)data,
+			  nr_pages, PROT_WRITE, pages, NULL, NULL);
+#elif LINUX_VERSION_CODE > KERNEL_VERSION(4,14,0)
 	*nf_pages = (int32_t)get_user_pages_remote(current, current->mm, (uint64_t)data,
 			  nr_pages, PROT_WRITE, pages, NULL, NULL);
 #else
@@ -102,7 +109,11 @@ mic_pin_user_pages (void *data, struct page **pages, uint32_t len, int32_t *nf_p
 			  nr_pages, PROT_WRITE, 1, pages, NULL);
 #endif
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5,8,0))
+	up_read(&current->mm->mmap_lock);
+#else
 	up_read(&current->mm->mmap_sem);
+#endif
 
 	// compare if the no of final pages is equal to no of requested pages
 	if ((*nf_pages) < nr_pages) {
@@ -126,7 +137,11 @@ send_flash_cmd(mic_ctx_t *mic_ctx, MIC_FLASH_CMD_TYPE type, void *data, uint32_t
 	sbox_scratch2_reg_t scratch2reg = {0};
 	uint32_t ret = 0;
 	void *src;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+	struct timespec64 t;
+#else
 	struct timeval t;
+#endif
 	struct flash_stat *statbuf = NULL;
 	uint64_t temp;
 	uint32_t i = 0;
@@ -320,7 +335,11 @@ send_flash_cmd(mic_ctx_t *mic_ctx, MIC_FLASH_CMD_TYPE type, void *data, uint32_t
 	case RAS_CMD_ECC_DISABLE:
 	case RAS_CMD_ECC_ENABLE:
 	case RAS_CMD_EXIT:
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+		ktime_get_real_ts64(&t);
+#else
 		do_gettimeofday(&t);
+#endif
 		SBOX_WRITE(t.tv_sec, mmio_va, SBOX_SCRATCH3);
 		scratch1reg.bits.command = type;
 		SBOX_WRITE(scratch1reg.value, mmio_va, SBOX_SCRATCH1);

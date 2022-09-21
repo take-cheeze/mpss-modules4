@@ -738,9 +738,11 @@ mic_get_file_size(const char* fn, uint32_t* file_len)
 	struct file *filp;
 	loff_t filp_size;
 	uint32_t status = 0;
+#ifdef get_fs
 	mm_segment_t fs = get_fs();
 
 	set_fs(get_ds());
+#endif
 
 	if (!fn || IS_ERR(filp = filp_open(fn, 0, 0))) {
 		status = EINVAL;
@@ -757,7 +759,9 @@ mic_get_file_size(const char* fn, uint32_t* file_len)
 cleanup_filp:
 	filp_close(filp, current->files);
 cleanup_fs:
+#ifdef set_fs
 	set_fs(fs);
+#endif
 	return status;
 }
 
@@ -770,8 +774,10 @@ mic_load_file(const char* fn, uint8_t* buffer, uint32_t max_size)
 	struct file *filp;
 	loff_t filp_size, pos = 0;
 
+#ifdef get_fs
 	mm_segment_t fs = get_fs();
 	set_fs(get_ds());
+#endif
 
 	if (!fn || IS_ERR(filp = filp_open(fn, 0, 0))) {
 		status = EINVAL;
@@ -796,7 +802,9 @@ mic_load_file(const char* fn, uint8_t* buffer, uint32_t max_size)
 cleanup_filp:
 	filp_close(filp, current->files);
 cleanup_fs:
+#ifdef set_fs
 	set_fs(fs);
+#endif
 
 	return status;
 }

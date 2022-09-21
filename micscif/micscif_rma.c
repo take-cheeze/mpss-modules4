@@ -62,12 +62,19 @@ static void scif_mmu_notifier_invalidate_page(struct mmu_notifier *mn,
 				struct mm_struct *mm,
 				unsigned long address);
 #endif
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+static int scif_mmu_notifier_invalidate_range_start(struct mmu_notifier *mn,
+				       const struct mmu_notifier_range *range);
+static void scif_mmu_notifier_invalidate_range_end(struct mmu_notifier *mn,
+				    const struct mmu_notifier_range *range);
+#else
 static void scif_mmu_notifier_invalidate_range_start(struct mmu_notifier *mn,
 				       struct mm_struct *mm,
 				       unsigned long start, unsigned long end);
 static void scif_mmu_notifier_invalidate_range_end(struct mmu_notifier *mn,
 				     struct mm_struct *mm,
 				     unsigned long start, unsigned long end);
+#endif
 static const struct mmu_notifier_ops scif_mmu_notifier_ops = {
 	.release = scif_mmu_notifier_release,
 	.clear_flush_young = NULL,
@@ -110,22 +117,39 @@ static void scif_mmu_notifier_invalidate_page(struct mmu_notifier *mn,
 }
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+static int scif_mmu_notifier_invalidate_range_start(struct mmu_notifier *mn,
+						const struct mmu_notifier_range *range)
+{
+	struct mm_struct *mm = range->mm;
+	unsigned long start = range->start, end = range->end;
+#else
 static void scif_mmu_notifier_invalidate_range_start(struct mmu_notifier *mn,
 				       struct mm_struct *mm,
 				       unsigned long start, unsigned long end)
 {
+#endif
 	struct endpt *ep;
 	struct rma_mmu_notifier	*mmn;
 	mmn = container_of(mn, struct rma_mmu_notifier, ep_mmu_notifier);
 	ep = mmn->ep;
 	micscif_rma_destroy_tcw(mmn, ep, true, (uint64_t)start, (uint64_t)(end - start));
 	pr_debug("%s start=%lx, end=%lx\n", __func__, start, end);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+	return 0;
+#else
 	return;
+#endif
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+static void scif_mmu_notifier_invalidate_range_end(struct mmu_notifier *mn,
+				     const struct mmu_notifier_range * range)
+#else
 static void scif_mmu_notifier_invalidate_range_end(struct mmu_notifier *mn,
 				     struct mm_struct *mm,
 				     unsigned long start, unsigned long end)
+#endif
 {
 	/* Nothing to do here, everything needed was done in invalidate_range_start */
 	pr_debug("%s\n", __func__);

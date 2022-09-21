@@ -1971,11 +1971,19 @@ __scif_pin_pages(void *addr, size_t len, int *out_prot,
 		prot |= SCIF_PROT_WRITE;
 retry:
 		mm = current->mm;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
+		down_write(&mm->mmap_lock);
+#else
 		down_write(&mm->mmap_sem);
+#endif
 		if (ulimit) {
 			err = __scif_check_inc_pinned_vm(mm, nr_pages);
 			if (err) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,8,0)
+				up_write(&mm->mmap_lock);
+#else
 				up_write(&mm->mmap_sem);
+#endif
 				pinned_pages->nr_pages = 0;
 				goto error_unmap;
 			}
@@ -1984,7 +1992,9 @@ retry:
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(4,14,0)
 		pinned_pages->nr_pages = get_user_pages_remote(
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,0,0)
 				current,
+#endif
 				mm,
 				(uint64_t)addr,
 				nr_pages,
@@ -2003,7 +2013,11 @@ retry:
 				pinned_pages->pages,
 				pinned_pages->vma);
 #endif
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
+		up_write(&mm->mmap_lock);
+#else
 		up_write(&mm->mmap_sem);
+#endif
 		if (nr_pages == pinned_pages->nr_pages) {
 #ifdef RMA_DEBUG
 			atomic_long_add_return(nr_pages, &ms_info.rma_pin_cnt);
